@@ -1,3 +1,73 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pixel Art Font (gunakan font bebas pixel, misal 'Press Start 2P' dari Google Fonts) */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --color-white: #FFFFFF;
+  --color-light-green: #A8FFB0;
+  --color-light-yellow: #FFF9B0;
+  --color-black: #222831;
+  --color-border: #BDBDBD;
+}
+
+body {
+  font-family: 'Press Start 2P', monospace, system-ui;
+  background: var(--color-white);
+  color: var(--color-black);
+  min-height: 100vh;
+  letter-spacing: 0.03em;
+}
+
+.pixel-border {
+  border: 2px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px 0 rgba(34,40,49,0.08);
+  background: var(--color-white);
+}
+
+.btn-pixel {
+  font-family: 'Press Start 2P', monospace;
+  background: linear-gradient(90deg, var(--color-light-green) 60%, var(--color-light-yellow) 100%);
+  color: var(--color-black);
+  border: 2px solid var(--color-border);
+  padding: 1rem 1.5rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px 0 rgba(34,40,49,0.08);
+  transition: background 0.2s, box-shadow 0.2s;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+.btn-pixel:active {
+  background: var(--color-light-yellow);
+  box-shadow: 0 1px 4px 0 rgba(34,40,49,0.10);
+}
+
+.input-pixel {
+  font-family: 'Press Start 2P', monospace;
+  border: 2px solid var(--color-border);
+  background: var(--color-white);
+  color: var(--color-black);
+  padding: 1rem 1.2rem;
+  border-radius: 0.5rem;
+  font-size: 1.1rem;
+  box-shadow: 0 1px 4px 0 rgba(34,40,49,0.06);
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 600px) {
+  html {
+    font-size: 13px;
+  }
+  .btn-pixel, .input-pixel {
+    font-size: 1rem;
+    padding: 0.9rem 1.1rem;
+  }
+}
