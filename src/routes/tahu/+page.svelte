@@ -2,7 +2,7 @@
   import { COLORS } from '$lib/colors';
 
   // Step state
-  let step = 1;
+  let step = $state(1);
   const totalSteps = 5;
 
   // Step 1: Pilih Pabrik
@@ -12,7 +12,7 @@
     { id: 'sekar', name: 'Sekar' },
     { id: 'ceningan', name: 'Ceningan' },
   ];
-  let selectedPabrik: string | null = null;
+  let selectedPabrik: string | null = $state(null);
 
   // Step 2: Absensi Dummy Data
   const karyawanDummy: Record<string, string[]> = {
@@ -21,16 +21,18 @@
     sekar: [ 'Gilang', 'Hana', 'Indra' ],
     ceningan: [ 'Joko', 'Kiki', 'Lina' ]
   };
-  let absensi: Record<string, string> = {};
-  let karyawan: string[] = [];
+  let absensi: Record<string, string> = $state({});
+  let karyawan: string[] = $state([]);
 
-  $: if (step === 2 && selectedPabrik) {
-    karyawan = karyawanDummy[selectedPabrik];
-    // Inisialisasi absensi jika belum ada
-    karyawan.forEach(nama => {
-      if (!(nama in absensi)) absensi[nama] = '';
-    });
-  }
+  $effect(() => {
+    if (step === 2 && selectedPabrik) {
+      karyawan = karyawanDummy[selectedPabrik];
+      // Inisialisasi absensi jika belum ada
+      karyawan.forEach(nama => {
+        if (!(nama in absensi)) absensi[nama] = '';
+      });
+    }
+  });
 
   const absensiOptions = [
     { id: 'rebus', label: 'Rebus' },
@@ -40,7 +42,7 @@
     { id: 'pulang', label: 'Pulang' },
   ];
 
-  let pengeluaran: { label: string; nominal: string }[] = [];
+  let pengeluaran: { label: string; nominal: string }[] = $state([]);
 
   function tambahPengeluaran() {
     pengeluaran = [...pengeluaran, { label: '', nominal: '' }];
@@ -73,15 +75,17 @@
     { nama: 'Fajar', pabrik: 'saelus' },
     { nama: 'Gilang', pabrik: 'ceningan' },
   ];
-  let salesOrder: Record<string, string> = {};
-  let filteredSales: Sales[] = [];
+  let salesOrder: Record<string, string> = $state({});
+  let filteredSales: Sales[] = $state([]);
 
-  $: if (step === 4 && selectedPabrik) {
-    filteredSales = salesList.filter(s => s.pabrik === selectedPabrik);
-    filteredSales.forEach(s => {
-      if (!(s.nama in salesOrder)) salesOrder[s.nama] = '';
-    });
-  }
+  $effect(() => {
+    if (step === 4 && selectedPabrik) {
+      filteredSales = salesList.filter(s => s.pabrik === selectedPabrik);
+      filteredSales.forEach(s => {
+        if (!(s.nama in salesOrder)) salesOrder[s.nama] = '';
+      });
+    }
+  });
 
   function selectAllOnFocus(event: FocusEvent) {
     (event.target as HTMLInputElement).select();
@@ -127,7 +131,7 @@
           {#each pabrikList as pabrik}
             <button type="button"
               class="btn-pixel w-full mb-2 {selectedPabrik === pabrik.id ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
-              on:click={() => selectedPabrik = pabrik.id}>
+              onclick={() => selectedPabrik = pabrik.id}>
               {selectedPabrik===pabrik.id?"✅":""} {pabrik.name}
             </button>
           {/each}
@@ -144,7 +148,7 @@
                   <button type="button"
                     class="btn-pixel py-3 text-base {absensi[nama] === opt.id ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
                     style="min-width:80px; font-size:1rem; padding:0.7rem 0.6rem;"
-                    on:click={() => absensi[nama] = opt.id}>
+                    onclick={() => absensi[nama] = opt.id}>
                     {absensi[nama]===opt.id?"✅":""} {opt.label}
                   </button>
                 {/each}
@@ -154,7 +158,7 @@
                   <button type="button"
                     class="btn-pixel py-3 text-base {absensi[nama] === opt.id ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
                     style="min-width:80px; font-size:1rem; padding:0.7rem 0.6rem;"
-                    on:click={() => absensi[nama] = opt.id}>
+                    onclick={() => absensi[nama] = opt.id}>
                     {absensi[nama]===opt.id?"✅":""} {opt.label}
                   </button>
                 {/each}
@@ -168,7 +172,7 @@
         <div class="space-y-4">
           {#each pengeluaran as item, idx}
             <div class="flex items-stretch gap-2 mb-3">
-              <button type="button" class="btn-pixel px-2 text-base h-full flex-shrink-0" style="min-width:2.5rem;" on:click={() => hapusPengeluaran(idx)} title="Hapus">
+              <button type="button" class="btn-pixel px-2 text-base h-full flex-shrink-0" style="min-width:2.5rem;" onclick={() => hapusPengeluaran(idx)} title="Hapus">
                 🗑️
               </button>
               <input class="input-pixel flex-1" type="text" placeholder="Label" bind:value={item.label} style="max-width:10rem;" />
@@ -176,10 +180,10 @@
                 class="input-pixel flex-1 min-w-0" 
                 type="number" min="0" 
                 placeholder="Nominal" 
-                bind:value={item.nominal} on:keydown={numberOnlyInput} on:focus={selectAllOnFocus} />
+                bind:value={item.nominal} onkeydown={numberOnlyInput} onfocus={selectAllOnFocus} />
             </div>
           {/each}
-          <button type="button" class="btn-pixel w-full mt-2" on:click={tambahPengeluaran}>+ Tambah Pengeluaran</button>
+          <button type="button" class="btn-pixel w-full mt-2" onclick={tambahPengeluaran}>+ Tambah Pengeluaran</button>
         </div>
       </div>
     {:else if step === 4}
@@ -191,7 +195,7 @@
                 {#if filteredSales[rowIdx * 2 + colIdx]}
                   <div class="flex items-center gap-2 bg-[var(--color-light-yellow)] rounded px-3 py-3 mb-2">
                     <div class="font-bold text-base flex-1" style="color:{COLORS.black};font-family:'Press Start 2P',monospace;">{filteredSales[rowIdx * 2 + colIdx].nama}</div>
-                    <input class="input-pixel flex-1 min-w-0" type="number" min="0" placeholder="Jumlah Pesanan" bind:value={salesOrder[filteredSales[rowIdx * 2 + colIdx].nama]} on:keydown={numberOnlyInput} on:focus={selectAllOnFocus} />
+                    <input class="input-pixel flex-1 min-w-0" type="number" min="0" placeholder="Jumlah Pesanan" bind:value={salesOrder[filteredSales[rowIdx * 2 + colIdx].nama]} onkeydown={numberOnlyInput} onfocus={selectAllOnFocus} />
                   </div>
                 {:else}
                   <div></div>
@@ -255,8 +259,8 @@
   <!-- Navigation Buttons Fixed Bottom -->
   <div class="fixed left-0 bottom-0 w-full bg-white border-t border-[var(--color-border)] z-50 py-4 px-0" style="box-shadow: 0 -2px 8px 0 rgba(34,40,49,0.08);">
     <div class="flex justify-center gap-4 w-full max-w-md mx-auto px-4">
-      <button class="btn-pixel w-32" on:click={prevStep} disabled={step === 1} style="opacity:{step === 1 ? 0.5 : 1}">Sebelumnya</button>
-      <button class="btn-pixel w-32" on:click={nextStep} disabled={(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama]))} style="opacity:{(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama])) ? 0.5 : 1}">Selanjutnya</button>
+      <button class="btn-pixel w-32" onclick={prevStep} disabled={step === 1} style="opacity:{step === 1 ? 0.5 : 1}">Sebelumnya</button>
+      <button class="btn-pixel w-32" onclick={nextStep} disabled={(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama]))} style="opacity:{(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama])) ? 0.5 : 1}">Selanjutnya</button>
     </div>
   </div>
 </div> 
