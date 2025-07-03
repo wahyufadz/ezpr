@@ -3,7 +3,7 @@
   let menuOpen = false;
   const routes = [
     { name: 'Dashboard', path: '/' },
-    { name: 'Laporan', path: '/laporan' },
+    { name: 'Tahu', path: '/tahu' },
     { name: 'Pengaturan', path: '/pengaturan' },
   ];
 </script>

@@ -8,4 +8,4 @@
 
 <Navbar />
 	{@render children()}
-<Footer />
+<!-- <Footer /> -->
