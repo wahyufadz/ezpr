@@ -75,17 +75,35 @@
     if (!isNumber && !isAllowed) event.preventDefault();
   }
   
-  function nextStep() {
-    if (step === 1 && !selectedPabrik) return;
-    if (step === 2 && absensiKaryawan.some(karyawan => !karyawan.absensi)) return;
-    if (step < totalSteps) step += 1;
+  function nextStepValidation():boolean {
+    if (step === 1 && !selectedPabrik) return false;
+    if (step === 2 && absensiKaryawan.some(karyawan => !karyawan.absensi)) return false;
+    if (step === 3 && pengeluaran.some(item => !item.label || !item.nominal)) return false;
+    return true;
   }
+
+  function nextStep() {
+    if (step<totalSteps && nextStepValidation()) step += 1;
+  }
+  
   function prevStep() {
     if (step > 1) step -= 1;
   }
 
   let isPrevBtnDisabled = $derived(step === 1);
-  let isNextBtnDsabled = $derived((!selectedPabrik) || (step === 2 && absensiKaryawan.some(nama => !nama.absensi)) || (step === 3 && pengeluaran.some(item => !item.label || !item.nominal)));
+  let isNextBtnDisabled = $derived(step<totalSteps && !nextStepValidation());
+
+  function whatsappMessage() {
+    return `https://wa.me/?text=${encodeURIComponent(`*Pabrik: ${selectedPabrik}*\n\n`+
+
+      `Absensi: \n${absensiKaryawan.map(k => `${k.nama}: ${k.absensi}`).join('\n')}\n\n`+
+
+      `Pengeluaran: \n${pengeluaran.map(p => `${p.label}: ${p.nominal}`).join('\n')}\n`+
+      `*Total Pengeluaran: ${pengeluaran.reduce((acc, item) => acc + Number(item.nominal), 0).toLocaleString()}*\n\n`+
+
+      `Pesanan: \n${salesOrder.map(s => `${s.nama}: ${s.pesanan}`).join('\n')}\n`+
+      `*Total Pesanan: ${salesOrder.reduce((acc, val) => acc + (Number(val.pesanan) || 0), 0).toLocaleString()}*`)}`;
+  }
 
 </script>
 
@@ -115,7 +133,7 @@
         <h1 class="text-lg font-bold mb-1 text-center" style="color:{COLORS.black}">Konfirmasi &amp; Ringkasan</h1>
       {/if}
     </div>
-    
+
     <!-- Step Content -->
     {#if step === 1}
       <div class="mb-8 mt-2">
@@ -234,7 +252,13 @@
   <div class="fixed left-0 bottom-0 w-full bg-white border-t border-[var(--color-border)] z-50 py-4 px-0" style="box-shadow: 0 -2px 8px 0 rgba(34,40,49,0.08);">
     <div class="flex justify-center gap-4 w-full max-w-md mx-auto px-4">
       <button class="btn-pixel w-32" onclick={prevStep} disabled={isPrevBtnDisabled} style="opacity:{isPrevBtnDisabled ? 0.5 : 1}">Sebelumnya</button>
-      <button class="btn-pixel w-32" onclick={nextStep} disabled={isNextBtnDsabled} style="opacity:{isNextBtnDsabled ? 0.5 : 1}">Selanjutnya</button>
+      {#if step<totalSteps}
+        <button class="btn-pixel w-32" onclick={nextStep} disabled={isNextBtnDisabled} style="opacity:{isNextBtnDisabled ? 0.5 : 1}">Selanjutnya</button>
+      {:else}
+        <a href={whatsappMessage()} target="_blank" class="btn-pixel w-32" style="opacity:1">
+          Kirim Ke WA
+        </a>
+      {/if}
     </div>
   </div>
 </div> 
