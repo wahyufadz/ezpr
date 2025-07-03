@@ -15,32 +15,20 @@
   let selectedPabrik: string | null = $state(null);
 
   // Step 2: Absensi Dummy Data
-  const karyawanDummy: Record<string, string[]> = {
+  const karyawanList: Record<string, string[]> = {
     buaji: [ 'Ayu', 'Budi', 'Cici' ],
     saelus: [ 'Dewi', 'Eka', 'Fajar' ],
     sekar: [ 'Gilang', 'Hana', 'Indra' ],
     ceningan: [ 'Joko', 'Kiki', 'Lina' ]
   };
-  let absensi: Record<string, string> = $state({});
-  let karyawan: string[] = $state([]);
-
-  $effect(() => {
-    if (step === 2 && selectedPabrik) {
-      karyawan = karyawanDummy[selectedPabrik];
-      // Inisialisasi absensi jika belum ada
-      karyawan.forEach(nama => {
-        if (!(nama in absensi)) absensi[nama] = '';
-      });
-    }
-  });
-
   const absensiOptions = [
-    { id: 'rebus', label: 'Rebus' },
-    { id: 'cetak', label: 'Cetak' },
-    { id: 'potong', label: 'Potong' },
-    { id: 'libur', label: 'Libur' },
-    { id: 'pulang', label: 'Pulang' },
+    'Rebus',
+    'Cetak',
+    'Potong',
+    'Libur',
+    'Pulang',
   ];
+  let absensiKaryawan: {nama:string,absensi:string}[] = $state([]);
 
   let pengeluaran: { label: string; nominal: string }[] = $state([]);
 
@@ -49,15 +37,6 @@
   }
   function hapusPengeluaran(idx: number) {
     pengeluaran = pengeluaran.filter((_, i) => i !== idx);
-  }
-
-  function nextStep() {
-    if (step === 1 && !selectedPabrik) return;
-    if (step === 2 && karyawan.some(nama => !absensi[nama])) return;
-    if (step < totalSteps) step += 1;
-  }
-  function prevStep() {
-    if (step > 1) step -= 1;
   }
 
   type Sales = {
@@ -75,15 +54,14 @@
     { nama: 'Fajar', pabrik: 'saelus' },
     { nama: 'Gilang', pabrik: 'ceningan' },
   ];
-  let salesOrder: Record<string, string> = $state({});
-  let filteredSales: Sales[] = $state([]);
-
+  let salesOrder: {nama:string,pesanan:number}[] = $state([]);
+  
   $effect(() => {
-    if (step === 4 && selectedPabrik) {
-      filteredSales = salesList.filter(s => s.pabrik === selectedPabrik);
-      filteredSales.forEach(s => {
-        if (!(s.nama in salesOrder)) salesOrder[s.nama] = '';
-      });
+    if (selectedPabrik) {
+      absensiKaryawan = [];
+      absensiKaryawan = karyawanList[selectedPabrik].map(nama => ({nama,absensi:''}));
+      salesOrder = [];
+      salesOrder = salesList.filter(s => s.pabrik === selectedPabrik).map(s => ({nama:s.nama,pesanan:0}));
     }
   });
 
@@ -96,6 +74,19 @@
     const isAllowed = event.key === 'Backspace' || event.key === 'Delete' || event.key === 'ArrowLeft' || event.key === 'ArrowRight';
     if (!isNumber && !isAllowed) event.preventDefault();
   }
+  
+  function nextStep() {
+    if (step === 1 && !selectedPabrik) return;
+    if (step === 2 && absensiKaryawan.some(karyawan => !karyawan.absensi)) return;
+    if (step < totalSteps) step += 1;
+  }
+  function prevStep() {
+    if (step > 1) step -= 1;
+  }
+
+  let isPrevBtnDisabled = $derived(step === 1);
+  let isNextBtnDsabled = $derived((!selectedPabrik) || (step === 2 && absensiKaryawan.some(nama => !nama.absensi)) || (step === 3 && pengeluaran.some(item => !item.label || !item.nominal)));
+
 </script>
 
 <div class="max-w-full mx-auto mt-8 mb-16 px-0 relative pt-20">
@@ -119,11 +110,12 @@
         <h2 class="text-m font-normal mb-1 text-center" style="color:{COLORS.black}">{pengeluaran.length > 0 ? `Total: ${pengeluaran.reduce((acc, item) => acc + Number(item.nominal), 0).toLocaleString()}` : ''}</h2>
       {:else if step === 4}
         <h1 class="text-lg font-bold mb-1 text-center" style="color:{COLORS.black}">Pesanan Sales</h1>
-        <h2 class="text-m font-normal mb-1 text-center" style="color:{COLORS.black}">Total pesanan: {Object.values(salesOrder).reduce((acc, val) => acc + (Number(val) || 0), 0).toLocaleString()}</h2>
+        <h2 class="text-m font-normal mb-1 text-center" style="color:{COLORS.black}">Total pesanan: {Object.values(salesOrder).reduce((acc, val) => acc + (Number(val.pesanan) || 0), 0).toLocaleString()}</h2>
       {:else}
         <h1 class="text-lg font-bold mb-1 text-center" style="color:{COLORS.black}">Konfirmasi &amp; Ringkasan</h1>
       {/if}
     </div>
+    
     <!-- Step Content -->
     {#if step === 1}
       <div class="mb-8 mt-2">
@@ -140,26 +132,16 @@
     {:else if step === 2}
       <div class="mb-8">
         <div class="space-y-4">
-          {#each karyawan as nama}
+          {#each absensiKaryawan as karyawan}
             <div class="bg-[var(--color-light-yellow)] rounded px-3 py-3 mb-2">
-              <div class="font-bold text-base mb-2" style="color:{COLORS.black};font-family:'Press Start 2P',monospace;">{nama}</div>
+              <div class="font-bold text-base mb-2" style="color:{COLORS.black};font-family:'Press Start 2P',monospace;">{karyawan.nama}</div>
               <div class="grid grid-cols-3 gap-2 mb-2">
-                {#each absensiOptions.slice(0,3) as opt}
+                {#each absensiOptions as opt}
                   <button type="button"
-                    class="btn-pixel py-3 text-base {absensi[nama] === opt.id ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
+                    class="btn-pixel py-3 text-base {karyawan.absensi === opt ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
                     style="min-width:80px; font-size:1rem; padding:0.7rem 0.6rem;"
-                    onclick={() => absensi[nama] = opt.id}>
-                    {absensi[nama]===opt.id?"✅":""} {opt.label}
-                  </button>
-                {/each}
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                {#each absensiOptions.slice(3) as opt}
-                  <button type="button"
-                    class="btn-pixel py-3 text-base {absensi[nama] === opt.id ? 'ring-2 ring-[var(--color-light-green)]' : ''}"
-                    style="min-width:80px; font-size:1rem; padding:0.7rem 0.6rem;"
-                    onclick={() => absensi[nama] = opt.id}>
-                    {absensi[nama]===opt.id?"✅":""} {opt.label}
+                    onclick={() => karyawan.absensi = opt}>
+                    {karyawan.absensi===opt?"✅":""} {opt.toUpperCase()}
                   </button>
                 {/each}
               </div>
@@ -189,13 +171,13 @@
     {:else if step === 4}
       <div class="mb-8">
         <div class="space-y-4">
-          {#each Array(Math.ceil(filteredSales.length / 2)) as _, rowIdx}
+          {#each Array(Math.ceil(salesOrder.length / 2)) as _, rowIdx}
             <div class="grid grid-cols-2 gap-2">
               {#each [0,1] as colIdx}
-                {#if filteredSales[rowIdx * 2 + colIdx]}
+                {#if salesOrder[rowIdx * 2 + colIdx]?.nama}
                   <div class="flex items-center gap-2 bg-[var(--color-light-yellow)] rounded px-3 py-3 mb-2">
-                    <div class="font-bold text-base flex-1" style="color:{COLORS.black};font-family:'Press Start 2P',monospace;">{filteredSales[rowIdx * 2 + colIdx].nama}</div>
-                    <input class="input-pixel flex-1 min-w-0" type="number" min="0" placeholder="Jumlah Pesanan" bind:value={salesOrder[filteredSales[rowIdx * 2 + colIdx].nama]} onkeydown={numberOnlyInput} onfocus={selectAllOnFocus} />
+                    <div class="font-bold text-base flex-1" style="color:{COLORS.black};font-family:'Press Start 2P',monospace;">{salesOrder[rowIdx * 2 + colIdx].nama}</div>
+                    <input class="input-pixel flex-1 min-w-0" type="number" min="0" placeholder="Jumlah Pesanan" bind:value={salesOrder[rowIdx * 2 + colIdx].pesanan} onkeydown={numberOnlyInput} onfocus={selectAllOnFocus} />
                   </div>
                 {:else}
                   <div></div>
@@ -208,7 +190,7 @@
     {:else if step === 5}
       <div class="mb-8">
         <h1 class="text-lg font-bold mb-4 text-center" style="color:{COLORS.black}">Konfirmasi &amp; Ringkasan</h1>
-        <div class="space-y-6">
+        <div class="space-y-4">
           <!-- Step 1: Pabrik -->
           <div class="bg-[var(--color-light-yellow)] rounded px-3 py-3">
             <div class="font-bold mb-2" style="color:{COLORS.black}">Pabrik dipilih:</div>
@@ -218,38 +200,30 @@
           <div class="bg-[var(--color-light-yellow)] rounded px-3 py-3">
             <div class="font-bold mb-2" style="color:{COLORS.black}">Absensi Karyawan:</div>
             <ul class="text-base" style="color:{COLORS.black}">
-              {#each karyawan as nama}
-                <li>{nama}: {absensi[nama] ? absensiOptions.find(opt => opt.id === absensi[nama])?.label : '-'}</li>
+              {#each absensiKaryawan as nama}
+                <li>{nama.nama}: {nama.absensi ? absensiOptions.find(opt => opt === nama.absensi) : '-'}</li>
               {/each}
             </ul>
           </div>
           <!-- Step 3: Pengeluaran -->
           <div class="bg-[var(--color-light-yellow)] rounded px-3 py-3">
             <div class="font-bold mb-2" style="color:{COLORS.black}">Pengeluaran:</div>
-            {#if pengeluaran.length > 0}
-              <ul class="text-base" style="color:{COLORS.black}">
-                {#each pengeluaran as item}
-                  <li>{item.label || '-'}: {item.nominal ? Number(item.nominal).toLocaleString() : '-'}</li>
-                {/each}
-              </ul>
-              <div class="mt-2 font-bold">Total: {pengeluaran.reduce((acc, item) => acc + Number(item.nominal), 0).toLocaleString()}</div>
-            {:else}
-              <div>-</div>
-            {/if}
+            <ul class="text-base" style="color:{COLORS.black}">
+              {#each pengeluaran as item}
+                <li>{item.label || '-'}: {item.nominal ? Number(item.nominal).toLocaleString() : '-'}</li>
+              {/each}
+            </ul>
+            <div class="mt-2 font-bold">Total Pengeluaran: {pengeluaran.reduce((acc, item) => acc + Number(item.nominal), 0).toLocaleString()}</div>
           </div>
           <!-- Step 4: Pesanan Sales -->
           <div class="bg-[var(--color-light-yellow)] rounded px-3 py-3">
             <div class="font-bold mb-2" style="color:{COLORS.black}">Pesanan Sales:</div>
-            {#if filteredSales.length > 0}
-              <ul class="text-base" style="color:{COLORS.black}">
-                {#each filteredSales as sales}
-                  <li>{sales.nama}: {salesOrder[sales.nama] ? Number(salesOrder[sales.nama]).toLocaleString() : '-'}</li>
-                {/each}
-              </ul>
-              <div class="mt-2 font-bold">Total pesanan: {Object.values(salesOrder).reduce((acc, val) => acc + (Number(val) || 0), 0).toLocaleString()}</div>
-            {:else}
-              <div>-</div>
-            {/if}
+            <ul class="text-base" style="color:{COLORS.black}">
+              {#each salesOrder as sales}
+                <li>{sales.nama}: {sales.pesanan ? Number(sales.pesanan).toLocaleString() : '-'}</li>
+              {/each}
+            </ul>
+            <div class="mt-2 font-bold">Total pesanan: {salesOrder.reduce((acc, val) => acc + (Number(val.pesanan) || 0), 0).toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -259,8 +233,8 @@
   <!-- Navigation Buttons Fixed Bottom -->
   <div class="fixed left-0 bottom-0 w-full bg-white border-t border-[var(--color-border)] z-50 py-4 px-0" style="box-shadow: 0 -2px 8px 0 rgba(34,40,49,0.08);">
     <div class="flex justify-center gap-4 w-full max-w-md mx-auto px-4">
-      <button class="btn-pixel w-32" onclick={prevStep} disabled={step === 1} style="opacity:{step === 1 ? 0.5 : 1}">Sebelumnya</button>
-      <button class="btn-pixel w-32" onclick={nextStep} disabled={(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama]))} style="opacity:{(step === 1 && !selectedPabrik) || (step === 2 && karyawan.some(nama => !absensi[nama])) ? 0.5 : 1}">Selanjutnya</button>
+      <button class="btn-pixel w-32" onclick={prevStep} disabled={isPrevBtnDisabled} style="opacity:{isPrevBtnDisabled ? 0.5 : 1}">Sebelumnya</button>
+      <button class="btn-pixel w-32" onclick={nextStep} disabled={isNextBtnDsabled} style="opacity:{isNextBtnDsabled ? 0.5 : 1}">Selanjutnya</button>
     </div>
   </div>
 </div> 
