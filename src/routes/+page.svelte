@@ -1,15 +1,414 @@
 <script lang="ts">
-	// Pesanan Tempe Harian — Main Order Form
-	// To be implemented
+	import SalesCard from '$lib/components/SalesCard.svelte';
+	import salesData from '$lib/data/sales.json';
+	import { generateCSV, downloadCSV, type PesananRow } from '$lib/utils/csv';
+	import { saveFormState, loadFormState, saveCSVData, getCSVData } from '$lib/utils/storage';
+
+	const activeSales = salesData.sales.filter(s => s.active);
+
+	// Get today's date in YYYY-MM-DD for Asia/Jakarta
+	function getTodayStr(): string {
+		const now = new Date();
+		const jakarta = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+		const y = jakarta.getFullYear();
+		const m = String(jakarta.getMonth() + 1).padStart(2, '0');
+		const d = String(jakarta.getDate()).padStart(2, '0');
+		return `${y}-${m}-${d}`;
+	}
+
+	const DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+	function formatDisplayDate(dateStr: string): string {
+		const parts = dateStr.split('-');
+		if (parts.length !== 3) return dateStr;
+		const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+		return `${DAYS[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+	}
+
+	let selectedDate = $state(getTodayStr());
+	let toast = $state('');
+	let toastTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let showResetConfirm = $state(false);
+	let lastUpdated = $state('');
+
+	// Per-sales state
+	interface SalesState {
+		oranye: number;
+		hijau: number;
+		merah: number;
+		libur: boolean;
+		saved: boolean;
+		savedAt: string;
+	}
+
+	let salesState = $state<Record<string, SalesState>>({});
+	let isRestoring = $state(true); // skip save during initial restore
+
+	function initState() {
+		const fresh: Record<string, SalesState> = {};
+		for (const s of activeSales) {
+			fresh[s.id] = { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
+		}
+		return fresh;
+	}
+
+	// Try restore from localStorage
+	const restored = loadFormState(selectedDate);
+	if (restored && restored.date === selectedDate) {
+		// Merge restored state with current sales list
+		const merged: Record<string, SalesState> = {};
+		for (const s of activeSales) {
+			const r = restored.sales[s.id];
+			merged[s.id] = r ? { ...r } : { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
+		}
+		salesState = merged;
+	} else {
+		salesState = initState();
+	}
+	isRestoring = false;
+
+	function saveFormToStorage() {
+		if (isRestoring) return;
+		saveFormState(selectedDate, { date: selectedDate, sales: { ...salesState } });
+	}
+
+	function updateSales(id: string, data: { oranye?: number; hijau?: number; merah?: number; libur?: boolean }) {
+		const current = salesState[id];
+		if (!current) return;
+		salesState[id] = {
+			...current,
+			...data,
+			saved: current.saved ? false : false,
+			savedAt: ''
+		};
+		const now = new Date();
+		lastUpdated = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+		saveFormToStorage();
+	}
+
+	function handleEdit(id: string) {
+		const s = salesState[id];
+		if (!s) return;
+		salesState[id] = { ...s, saved: false, savedAt: '' };
+		const now = new Date();
+		lastUpdated = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+		saveFormToStorage();
+	}
+
+	function handleSave(id: string) {
+		const s = salesState[id];
+		const sales = activeSales.find(x => x.id === id);
+		if (!sales || !s) return;
+
+		const now = new Date();
+		const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+		salesState[id] = {
+			...s,
+			saved: true,
+			savedAt: time
+		};
+
+		lastUpdated = time;
+
+		// Commit to CSV store
+		const rows = getCSVData(selectedDate);
+		const total = s.oranye + s.hijau + s.merah;
+		const status = s.libur ? 'libur' : 'pesan';
+
+		const row: PesananRow = {
+			tanggal: selectedDate,
+			id_sales: sales.id,
+			nama_sales: sales.name,
+			tempe_oranye: s.libur ? 0 : s.oranye,
+			tempe_hijau: s.libur ? 0 : s.hijau,
+			tempe_merah: s.libur ? 0 : s.merah,
+			total: s.libur ? 0 : total,
+			status
+		};
+
+		// Replace existing row for same sales+date
+		const idx = rows.findIndex(r => r.id_sales === id);
+		if (idx >= 0) rows[idx] = row;
+		else rows.push(row);
+
+		saveCSVData(selectedDate, rows);
+		saveFormToStorage();
+		showToast(`✅ ${sales.name} tersimpan`);
+	}
+
+	function handleDownload() {
+		const rows = getCSVData(selectedDate);
+		const csv = generateCSV(rows);
+		downloadCSV(csv, `pesanan-tempe-${selectedDate}.csv`);
+		showToast('📥 CSV didownload');
+	}
+
+	function handleDateChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const newDate = target.value;
+		// Save current date state first
+		saveFormState(selectedDate, { date: selectedDate, sales: { ...salesState } });
+
+		selectedDate = newDate;
+		isRestoring = true;
+
+		const restoredDate = loadFormState(newDate);
+		if (restoredDate && restoredDate.date === newDate) {
+			const merged: Record<string, SalesState> = {};
+			for (const s of activeSales) {
+				const r = restoredDate.sales[s.id];
+				merged[s.id] = r ? { ...r } : { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
+			}
+			salesState = merged;
+		} else {
+			salesState = initState();
+		}
+		isRestoring = false;
+	}
+
+	function handleReset() {
+		showResetConfirm = true;
+	}
+
+	function confirmReset() {
+		showResetConfirm = false;
+		salesState = initState();
+		saveCSVData(selectedDate, []);
+		saveFormToStorage();
+		showToast('🔄 Semua direset');
+	}
+
+	function showToast(msg: string) {
+		toast = msg;
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => { toast = ''; }, 2500);
+	}
+
+	const savedCount = $derived(Object.values(salesState).filter(s => s.saved).length);
+	const totalCount = $derived(activeSales.length);
+
+	// Sort: saved non-libur → libur → unsaved non-libur
+	const sortedSales = $derived(
+		[...activeSales].sort((a, b) => {
+			const sa = salesState[a.id];
+			const sb = salesState[b.id];
+			if (!sa || !sb) return 0;
+
+			const aOrder = sa.saved && !sa.libur ? 0 : sa.libur ? 1 : 2;
+			const bOrder = sb.saved && !sb.libur ? 0 : sb.libur ? 1 : 2;
+			return aOrder - bOrder;
+		})
+	);
+
+	// Summary totals from saved non-libur sales
+	const totalOranye = $derived(
+		Object.values(salesState)
+			.filter(s => s.saved && !s.libur)
+			.reduce((sum, s) => sum + s.oranye, 0)
+	);
+	const totalHijau = $derived(
+		Object.values(salesState)
+			.filter(s => s.saved && !s.libur)
+			.reduce((sum, s) => sum + s.hijau, 0)
+	);
+	const totalMerah = $derived(
+		Object.values(salesState)
+			.filter(s => s.saved && !s.libur)
+			.reduce((sum, s) => sum + s.merah, 0)
+	);
+
+	// Section groups (sorted by name)
+	const sectionTersimpan = $derived(
+		sortedSales
+			.filter(s => salesState[s.id]?.saved && !salesState[s.id]?.libur)
+			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+	);
+	const sectionLibur = $derived(
+		sortedSales
+			.filter(s => salesState[s.id]?.libur)
+			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+	);
+	const sectionBelum = $derived(
+		sortedSales
+			.filter(s => !salesState[s.id]?.saved && !salesState[s.id]?.libur)
+			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+	);
+
+	let activeTab: 'belum' | 'tersimpan' | 'libur' | null = $state('belum');
+
+	// Toggle tab: click same tab → close
+	function switchTab(tab: 'belum' | 'tersimpan' | 'libur') {
+		activeTab = activeTab === tab ? null : tab;
+	}
+
+	// Auto-switch to Tersimpan tab when all done
+	$effect(() => {
+		if (allSaved && activeTab === 'belum') {
+			activeTab = 'tersimpan';
+		}
+	});
+
+	const allSaved = $derived(sectionBelum.length === 0);
 </script>
 
 <div class="app">
 	<header class="header">
 		<h1>Pesanan Tempe Harian</h1>
+		<div class="date-display">{formatDisplayDate(selectedDate)}</div>
+		{#if lastUpdated}
+			<div class="updated-info">Terakhir update data {lastUpdated}</div>
+		{/if}
 	</header>
+
+	<!-- Summary -->
+	<div class="summary-bar">
+		<div class="summary-item-bar" style="--clr: #FF9800">
+			<span class="summary-label">🟠 Oranye</span>
+			<span class="summary-value">{totalOranye}</span>
+		</div>
+		<div class="summary-item-bar" style="--clr: #4CAF50">
+			<span class="summary-label">🟢 Hijau</span>
+			<span class="summary-value">{totalHijau}</span>
+		</div>
+		<div class="summary-item-bar" style="--clr: #F44336">
+			<span class="summary-label">🔴 Merah</span>
+			<span class="summary-value">{totalMerah}</span>
+		</div>
+	</div>
+
+	<div class="toolbar">
+		<span class="counter-inline">{savedCount}/{totalCount} tersimpan</span>
+		<button class="reset-btn" onclick={handleReset}>Reset</button>
+	</div>
+
+	<!-- Floating tab bar -->
+	<div class="tab-bar">
+		<button
+			class="tab"
+			class:active={activeTab === 'belum'}
+			onclick={() => switchTab('belum')}
+		>
+			📝 Belum <span class="tab-count">{sectionBelum.length}</span>
+		</button>
+		<button
+			class="tab"
+			class:active={activeTab === 'tersimpan'}
+			onclick={() => switchTab('tersimpan')}
+		>
+			✅ Tersimpan <span class="tab-count">{sectionTersimpan.length}</span>
+		</button>
+		<button
+			class="tab"
+			class:active={activeTab === 'libur'}
+			onclick={() => switchTab('libur')}
+		>
+			🚫 Libur <span class="tab-count">{sectionLibur.length}</span>
+		</button>
+	</div>
+
 	<main class="main">
-		<p>Form akan dikembangkan di sini.</p>
+		{#if activeSales.length === 0}
+			<div class="empty">Tidak ada sales aktif</div>
+		{:else if activeTab === 'belum'}
+			<div class="section-body">
+				{#if sectionBelum.length === 0}
+					<div class="empty-section done">Semua sudah terkonfirmasi ✅</div>
+				{:else}
+					{#each sectionBelum as sales (sales.id)}
+						{@const s = salesState[sales.id]}
+						{#if s}
+							<SalesCard
+								name={sales.name}
+								oranye={s.oranye}
+								hijau={s.hijau}
+								merah={s.merah}
+								libur={s.libur}
+								saved={s.saved}
+								savedAt={s.savedAt}
+								onSave={() => handleSave(sales.id)}
+								onUpdate={(data) => updateSales(sales.id, data)}
+								onEdit={() => handleEdit(sales.id)}
+							/>
+						{/if}
+					{/each}
+				{/if}
+			</div>
+		{:else if activeTab === 'tersimpan'}
+			<div class="section-body">
+				{#if sectionTersimpan.length === 0}
+					<div class="empty-section">Belum ada</div>
+				{:else}
+					{#each sectionTersimpan as sales (sales.id)}
+						{@const s = salesState[sales.id]}
+						{#if s}
+							<SalesCard
+								name={sales.name}
+								oranye={s.oranye}
+								hijau={s.hijau}
+								merah={s.merah}
+								libur={s.libur}
+								saved={s.saved}
+								savedAt={s.savedAt}
+								onSave={() => handleSave(sales.id)}
+								onUpdate={(data) => updateSales(sales.id, data)}
+								onEdit={() => handleEdit(sales.id)}
+							/>
+						{/if}
+					{/each}
+				{/if}
+			</div>
+		{:else if activeTab === 'libur'}
+			<div class="section-body">
+				{#if sectionLibur.length === 0}
+					<div class="empty-section">Semua masuk</div>
+				{:else}
+					{#each sectionLibur as sales (sales.id)}
+						{@const s = salesState[sales.id]}
+						{#if s}
+							<SalesCard
+								name={sales.name}
+								oranye={s.oranye}
+								hijau={s.hijau}
+								merah={s.merah}
+								libur={s.libur}
+								saved={s.saved}
+								savedAt={s.savedAt}
+								onSave={() => handleSave(sales.id)}
+								onUpdate={(data) => updateSales(sales.id, data)}
+								onEdit={() => handleEdit(sales.id)}
+							/>
+						{/if}
+					{/each}
+				{/if}
+			</div>
+		{/if}
 	</main>
+
+	{#if allSaved}
+		<footer class="footer">
+			<button class="save-data-btn" onclick={handleDownload}>
+				💾 Simpan Data
+			</button>
+		</footer>
+	{/if}
+
+	{#if showResetConfirm}
+		<div class="overlay" onclick={() => showResetConfirm = false} role="dialog">
+			<div class="dialog" onclick={(e: MouseEvent) => e.stopPropagation()}>
+				<p>Yakin hapus semua isian?</p>
+				<div class="dialog-actions">
+					<button class="dialog-btn cancel" onclick={() => showResetConfirm = false}>Batal</button>
+					<button class="dialog-btn danger" onclick={confirmReset}>Ya, Hapus</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if toast}
+		<div class="toast">{toast}</div>
+	{/if}
 </div>
 
 <style>
@@ -18,19 +417,264 @@
 		margin: 0 auto;
 		padding: 1rem;
 		min-height: 100vh;
+		padding-bottom: 5rem;
 	}
 
 	.header {
-		padding: 1rem 0;
+		padding: 0.75rem 0;
 		text-align: center;
 	}
 
 	.header h1 {
 		font-size: 1.25rem;
 		color: #ffffff;
+		margin-bottom: 0.25rem;
+	}
+
+	.date-display {
+		font-size: 0.9rem;
+		color: #888;
+	}
+
+	.updated-info {
+		font-size: 0.75rem;
+		color: #555;
+		margin-top: 0.2rem;
+	}
+
+	/* Summary bar */
+	.summary-bar {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.summary-item-bar {
+		flex: 1;
+		background: #1e1e1e;
+		border: 1px solid #333;
+		border-left: 3px solid var(--clr);
+		border-radius: 8px;
+		padding: 0.6rem 0.5rem;
+		text-align: center;
+	}
+
+	.summary-label {
+		display: block;
+		font-size: 0.7rem;
+		color: #888;
+		margin-bottom: 0.2rem;
+	}
+
+	.summary-value {
+		display: block;
+		font-size: 1.3rem;
+		font-weight: 700;
+		color: #fff;
+	}
+
+	.toolbar {
+		display: flex;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.counter-inline {
+		font-size: 0.85rem;
+		color: #888;
+	}
+
+	.reset-btn {
+		padding: 0.5rem 1rem;
+		background: #F44336;
+		color: #fff;
+		border: none;
+		border-radius: 8px;
+		font-weight: 700;
+		font-size: 0.85rem;
+	}
+
+	.reset-btn:active {
+		opacity: 0.8;
+	}
+
+	/* Sticky tab bar */
+	.tab-bar {
+		position: sticky;
+		top: 0;
+		z-index: 40;
+		display: flex;
+		gap: 0.4rem;
+		padding: 0.5rem 0 0.75rem;
+		background: #121212;
+	}
+
+	.tab {
+		flex: 1;
+		padding: 0.5rem 0.4rem;
+		background: #1e1e1e;
+		color: #888;
+		border: 1px solid #333;
+		border-radius: 8px;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		white-space: nowrap;
+	}
+
+	.tab:active {
+		background: #2a2a2a;
+	}
+
+	.tab.active {
+		background: #2a2a2a;
+		color: #fff;
+		border-color: #555;
+	}
+
+	.tab-count {
+		color: #aaa;
+		font-size: 0.7rem;
+	}
+
+	.tab.active .tab-count {
+		color: #fff;
 	}
 
 	.main {
-		padding: 1rem 0;
+		padding-bottom: 1rem;
+	}
+
+	.empty {
+		text-align: center;
+		color: #888;
+		padding: 3rem 1rem;
+		font-size: 1.1rem;
+	}
+
+	.section-body {
+		padding-bottom: 1rem;
+	}
+
+	.empty-section {
+		text-align: center;
+		color: #555;
+		padding: 2rem 1rem;
+		font-size: 0.9rem;
+	}
+
+	.empty-section.done {
+		color: #4CAF50;
+		font-weight: 600;
+	}
+
+	/* Footer */
+	.footer {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		background: #1a1a1a;
+		border-top: 1px solid #333;
+		padding: 0.75rem 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 50;
+	}
+
+	.save-data-btn {
+		width: 100%;
+		max-width: 400px;
+		padding: 0.8rem;
+		background: #4CAF50;
+		color: #fff;
+		border: none;
+		border-radius: 10px;
+		font-size: 1rem;
+		font-weight: 700;
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.save-data-btn:active {
+		opacity: 0.85;
+	}
+
+	/* Reset confirm dialog */
+	.overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0,0,0,0.7);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+		padding: 1rem;
+	}
+
+	.dialog {
+		background: #2a2a2a;
+		border: 1px solid #444;
+		border-radius: 12px;
+		padding: 1.5rem;
+		max-width: 320px;
+		width: 100%;
+		text-align: center;
+	}
+
+	.dialog p {
+		color: #e0e0e0;
+		font-size: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.dialog-actions {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: center;
+	}
+
+	.dialog-btn {
+		padding: 0.6rem 1.25rem;
+		border: none;
+		border-radius: 8px;
+		font-size: 0.9rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.dialog-btn.cancel {
+		background: #444;
+		color: #ccc;
+	}
+
+	.dialog-btn.danger {
+		background: #F44336;
+		color: #fff;
+	}
+
+	/* Toast */
+	.toast {
+		position: fixed;
+		bottom: 4.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		background: #333;
+		color: #fff;
+		padding: 0.6rem 1.25rem;
+		border-radius: 20px;
+		font-size: 0.9rem;
+		font-weight: 600;
+		z-index: 200;
+		animation: toast-in 0.2s ease;
+	}
+
+	@keyframes toast-in {
+		from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+		to { opacity: 1; transform: translateX(-50%) translateY(0); }
 	}
 </style>

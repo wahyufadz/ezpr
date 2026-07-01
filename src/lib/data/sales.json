@@ -1,3 +1,34 @@
 {
-  "sales": []
+  "sales": [
+    { "id": "s001", "name": "Abdul Rahman", "active": true },
+    { "id": "s002", "name": "Agus Setiawan", "active": true },
+    { "id": "s003", "name": "Ahmad Fauzi", "active": true },
+    { "id": "s004", "name": "Andi Prasetyo", "active": true },
+    { "id": "s005", "name": "Bambang Hermawan", "active": true },
+    { "id": "s006", "name": "Budi Santoso", "active": true },
+    { "id": "s007", "name": "Dedi Irawan", "active": true },
+    { "id": "s008", "name": "Dewi Lestari", "active": true },
+    { "id": "s009", "name": "Eko Susanto", "active": true },
+    { "id": "s010", "name": "Fajar Nugroho", "active": true },
+    { "id": "s011", "name": "Hadi Kusuma", "active": true },
+    { "id": "s012", "name": "Hendra Wijaya", "active": true },
+    { "id": "s013", "name": "Indra Gunawan", "active": true },
+    { "id": "s014", "name": "Joko Hartono", "active": true },
+    { "id": "s015", "name": "Kartika Sari", "active": true },
+    { "id": "s016", "name": "Lina Marlina", "active": true },
+    { "id": "s017", "name": "Maman Suherman", "active": true },
+    { "id": "s018", "name": "Maya Anggraini", "active": true },
+    { "id": "s019", "name": "Nina Permata", "active": true },
+    { "id": "s020", "name": "Rahmat Hidayat", "active": true },
+    { "id": "s021", "name": "Rina Fitriani", "active": true },
+    { "id": "s022", "name": "Rudi Hartono", "active": true },
+    { "id": "s023", "name": "Sari Wulandari", "active": true },
+    { "id": "s024", "name": "Slamet Riyadi", "active": true },
+    { "id": "s025", "name": "Sri Wahyuni", "active": true },
+    { "id": "s026", "name": "Suharno", "active": true },
+    { "id": "s027", "name": "Supriyadi", "active": true },
+    { "id": "s028", "name": "Tini Sumarni", "active": true },
+    { "id": "s029", "name": "Wawan Kurniawan", "active": true },
+    { "id": "s030", "name": "Yanto Supriyanto", "active": true }
+  ]
 }
