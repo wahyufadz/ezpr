@@ -1,14 +1,15 @@
 <script lang="ts">
-	// Pesanan Tempe Harian — Main Order Form
+	// History — View past orders
 	// To be implemented
 </script>
 
 <div class="app">
 	<header class="header">
-		<h1>Pesanan Tempe Harian</h1>
+		<a href="/" class="back">← Kembali</a>
+		<h1>Riwayat Pesanan</h1>
 	</header>
 	<main class="main">
-		<p>Form akan dikembangkan di sini.</p>
+		<p>Riwayat akan dikembangkan di sini.</p>
 	</main>
 </div>
 
@@ -22,12 +23,17 @@
 
 	.header {
 		padding: 1rem 0;
-		text-align: center;
 	}
 
 	.header h1 {
 		font-size: 1.25rem;
 		color: #ffffff;
+	}
+
+	.back {
+		color: #888;
+		text-decoration: none;
+		font-size: 0.9rem;
 	}
 
 	.main {
