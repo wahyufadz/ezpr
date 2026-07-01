@@ -251,6 +251,25 @@
 	});
 
 	const allSaved = $derived(sectionBelum.length === 0);
+
+	// Search
+	let searchText = $state('');
+
+	const filteredBelum = $derived(
+		searchText
+			? sectionBelum.filter(s => s.name.toLowerCase().includes(searchText.toLowerCase()))
+			: sectionBelum
+	);
+	const filteredTersimpan = $derived(
+		searchText
+			? sectionTersimpan.filter(s => s.name.toLowerCase().includes(searchText.toLowerCase()))
+			: sectionTersimpan
+	);
+	const filteredLibur = $derived(
+		searchText
+			? sectionLibur.filter(s => s.name.toLowerCase().includes(searchText.toLowerCase()))
+			: sectionLibur
+	);
 </script>
 
 <div class="app">
@@ -281,6 +300,19 @@
 	<div class="toolbar">
 		<span class="counter-inline">{savedCount}/{totalCount} tersimpan</span>
 		<button class="reset-btn" onclick={handleReset}>Reset</button>
+	</div>
+
+	<!-- Searchbar -->
+	<div class="searchbar">
+		<input
+			type="text"
+			class="search-input"
+			placeholder="🔍 Cari nama sales..."
+			bind:value={searchText}
+		/>
+		{#if searchText}
+			<button class="search-clear" onclick={() => searchText = ''}>✕</button>
+		{/if}
 	</div>
 
 	<!-- Floating tab bar -->
@@ -316,7 +348,7 @@
 				{#if sectionBelum.length === 0}
 					<div class="empty-section done">Semua sudah terkonfirmasi ✅</div>
 				{:else}
-					{#each sectionBelum as sales (sales.id)}
+					{#each filteredBelum as sales (sales.id)}
 						{@const s = salesState[sales.id]}
 						{#if s}
 							<SalesCard
@@ -340,7 +372,7 @@
 				{#if sectionTersimpan.length === 0}
 					<div class="empty-section">Belum ada</div>
 				{:else}
-					{#each sectionTersimpan as sales (sales.id)}
+					{#each filteredTersimpan as sales (sales.id)}
 						{@const s = salesState[sales.id]}
 						{#if s}
 							<SalesCard
@@ -364,7 +396,7 @@
 				{#if sectionLibur.length === 0}
 					<div class="empty-section">Semua masuk</div>
 				{:else}
-					{#each sectionLibur as sales (sales.id)}
+					{#each filteredLibur as sales (sales.id)}
 						{@const s = salesState[sales.id]}
 						{#if s}
 							<SalesCard
@@ -498,6 +530,47 @@
 
 	.reset-btn:active {
 		opacity: 0.8;
+	}
+
+	/* Searchbar */
+	.searchbar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.search-input {
+		flex: 1;
+		padding: 0.55rem 0.8rem;
+		background: #1e1e1e;
+		color: #e0e0e0;
+		border: 1px solid #444;
+		border-radius: 8px;
+		font-size: 0.9rem;
+		outline: none;
+	}
+
+	.search-input::placeholder {
+		color: #666;
+	}
+
+	.search-input:focus {
+		border-color: #FF9800;
+	}
+
+	.search-clear {
+		padding: 0.3rem 0.6rem;
+		background: #333;
+		color: #aaa;
+		border: none;
+		border-radius: 6px;
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+
+	.search-clear:active {
+		background: #444;
 	}
 
 	/* Sticky tab bar */
