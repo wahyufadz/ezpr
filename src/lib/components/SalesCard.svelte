@@ -26,10 +26,30 @@
 	} = $props();
 
 	let showConfirm = $state(false);
+	let showLiburConfirm = $state(false);
 
 	function updateOranye(v: number) { onUpdate({ oranye: v, hijau, merah, libur }); }
 	function updateHijau(v: number) { onUpdate({ oranye, hijau: v, merah, libur }); }
 	function updateMerah(v: number) { onUpdate({ oranye, hijau, merah: v, libur }); }
+
+	function requestLibur() {
+		const hasInput = oranye > 0 || hijau > 0 || merah > 0;
+		if (hasInput) {
+			showLiburConfirm = true;
+		} else {
+			// No input yet, just mark libur directly
+			onUpdate({ oranye: 0, hijau: 0, merah: 0, libur: true });
+		}
+	}
+
+	function confirmLibur() {
+		showLiburConfirm = false;
+		onUpdate({ oranye: 0, hijau: 0, merah: 0, libur: true });
+	}
+
+	function cancelLibur() {
+		showLiburConfirm = false;
+	}
 
 	function toggleLibur() {
 		const nextLibur = !libur;
@@ -115,7 +135,7 @@
 		<div class="card-header">
 			<h2 class="card-name">{name}</h2>
 			<label class="libur-toggle">
-				<input type="checkbox" checked={false} onchange={toggleLibur} />
+				<input type="checkbox" checked={false} onchange={requestLibur} />
 				<span class="libur-label">Libur</span>
 			</label>
 		</div>
@@ -149,6 +169,19 @@
 				<div class="dialog-actions">
 					<button class="dialog-btn cancel" onclick={cancelSave}>Batal</button>
 					<button class="dialog-btn ok" onclick={confirmSave}>Ya, Simpan</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if showLiburConfirm}
+		<div class="overlay" onclick={cancelLibur} role="dialog">
+			<div class="dialog" onclick={(e: MouseEvent) => e.stopPropagation()}>
+				<p>Tandai <strong>{name}</strong> sebagai <span style="color:#F44336">Libur</span>?</p>
+				<p class="dialog-hint">Input yang sudah diisi akan di-reset ke 0</p>
+				<div class="dialog-actions">
+					<button class="dialog-btn cancel" onclick={cancelLibur}>Batal</button>
+					<button class="dialog-btn danger" onclick={confirmLibur}>Ya, Liburkan</button>
 				</div>
 			</div>
 		</div>
@@ -375,5 +408,17 @@
 	.dialog-btn.ok {
 		background: #FF9800;
 		color: #121212;
+	}
+
+	.dialog-btn.danger {
+		background: #F44336;
+		color: #fff;
+	}
+
+	.dialog-hint {
+		font-size: 0.8rem;
+		color: #888;
+		margin-top: -0.5rem;
+		margin-bottom: 0.75rem;
 	}
 </style>

@@ -30,6 +30,8 @@
 	let toast = $state('');
 	let toastTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 	let showResetConfirm = $state(false);
+	let resetInputText = $state('');
+	const RESET_CONFIRM_WORD = 'RESET';
 	let lastUpdated = $state('');
 
 	// Per-sales state
@@ -169,11 +171,14 @@
 	}
 
 	function handleReset() {
+		resetInputText = '';
 		showResetConfirm = true;
 	}
 
 	function confirmReset() {
+		if (resetInputText !== RESET_CONFIRM_WORD) return;
 		showResetConfirm = false;
+		resetInputText = '';
 		salesState = initState();
 		saveCSVData(selectedDate, []);
 		saveFormToStorage();
@@ -346,7 +351,12 @@
 		{:else if activeTab === 'belum'}
 			<div class="section-body">
 				{#if sectionBelum.length === 0}
-					<div class="empty-section done">Semua sudah terkonfirmasi ✅</div>
+					<div class="empty-section done">
+					<p>Semua sudah terkonfirmasi ✅</p>
+					<button class="save-data-inline" onclick={handleDownload}>
+						💾 Simpan Data
+					</button>
+				</div>
 				{:else}
 					{#each filteredBelum as sales (sales.id)}
 						{@const s = salesState[sales.id]}
@@ -418,21 +428,27 @@
 		{/if}
 	</main>
 
-	{#if allSaved}
-		<footer class="footer">
-			<button class="save-data-btn" onclick={handleDownload}>
-				💾 Simpan Data
-			</button>
-		</footer>
-	{/if}
-
 	{#if showResetConfirm}
 		<div class="overlay" onclick={() => showResetConfirm = false} role="dialog">
 			<div class="dialog" onclick={(e: MouseEvent) => e.stopPropagation()}>
-				<p>Yakin hapus semua isian?</p>
+				<p>⚠️ <strong>Reset semua data?</strong></p>
+				<p class="dialog-hint">Ketik <code>RESET</code> untuk konfirmasi</p>
+				<input
+					type="text"
+					class="reset-input"
+					placeholder="Ketik RESET..."
+					bind:value={resetInputText}
+					onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') confirmReset(); }}
+				/>
 				<div class="dialog-actions">
 					<button class="dialog-btn cancel" onclick={() => showResetConfirm = false}>Batal</button>
-					<button class="dialog-btn danger" onclick={confirmReset}>Ya, Hapus</button>
+					<button
+						class="dialog-btn danger"
+						disabled={resetInputText !== RESET_CONFIRM_WORD}
+						onclick={confirmReset}
+					>
+						Hapus Semua
+					</button>
 				</div>
 			</div>
 		</div>
@@ -449,7 +465,6 @@
 		margin: 0 auto;
 		padding: 1rem;
 		min-height: 100vh;
-		padding-bottom: 5rem;
 	}
 
 	.header {
@@ -642,38 +657,29 @@
 	.empty-section.done {
 		color: #4CAF50;
 		font-weight: 600;
-	}
-
-	/* Footer */
-	.footer {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		background: #1a1a1a;
-		border-top: 1px solid #333;
-		padding: 0.75rem 1rem;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		z-index: 50;
+		gap: 1rem;
 	}
 
-	.save-data-btn {
-		width: 100%;
-		max-width: 400px;
-		padding: 0.8rem;
+	.empty-section.done p {
+		margin: 0;
+	}
+
+	.save-data-inline {
+		padding: 0.7rem 2rem;
 		background: #4CAF50;
 		color: #fff;
 		border: none;
 		border-radius: 10px;
-		font-size: 1rem;
+		font-size: 0.95rem;
 		font-weight: 700;
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
 	}
 
-	.save-data-btn:active {
+	.save-data-inline:active {
 		opacity: 0.85;
 	}
 
@@ -730,10 +736,53 @@
 		color: #fff;
 	}
 
+	.dialog-btn.danger:disabled {
+		background: #555;
+		color: #999;
+		cursor: not-allowed;
+	}
+
+	.dialog-hint {
+		font-size: 0.8rem;
+		color: #888;
+		margin-bottom: 0.75rem;
+	}
+
+	.dialog-hint code {
+		background: #444;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: #F44336;
+	}
+
+	.reset-input {
+		width: 100%;
+		padding: 0.6rem 0.8rem;
+		background: #1e1e1e;
+		color: #e0e0e0;
+		border: 1px solid #555;
+		border-radius: 8px;
+		font-size: 1rem;
+		text-align: center;
+		outline: none;
+		margin-bottom: 1rem;
+		box-sizing: border-box;
+	}
+
+	.reset-input:focus {
+		border-color: #F44336;
+	}
+
+	.reset-input::placeholder {
+		color: #555;
+	}
+
 	/* Toast */
 	.toast {
 		position: fixed;
-		bottom: 4.5rem;
+		bottom: 2rem;
 		left: 50%;
 		transform: translateX(-50%);
 		background: #333;
