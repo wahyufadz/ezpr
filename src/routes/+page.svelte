@@ -242,16 +242,20 @@
 	);
 
 	let activeTab: 'belum' | 'tersimpan' | 'libur' | null = $state('belum');
+	let autoSwitched = $state(false);
 
 	// Toggle tab: click same tab → close
 	function switchTab(tab: 'belum' | 'tersimpan' | 'libur') {
 		activeTab = activeTab === tab ? null : tab;
+		// If user manually goes to 'belum' after auto-switch, allow it
+		if (tab === 'belum') autoSwitched = true;
 	}
 
-	// Auto-switch to Tersimpan tab when all done
+	// Auto-switch to Tersimpan when all done (one-shot per session)
 	$effect(() => {
-		if (allSaved && activeTab === 'belum') {
+		if (allSaved && activeTab === 'belum' && !autoSwitched) {
 			activeTab = 'tersimpan';
+			autoSwitched = true;
 		}
 	});
 
