@@ -16,7 +16,7 @@
 
 <div class="app">
 	<header class="header">
-		<a href="{base}/" class="back">← Kembali</a>
+		<a href="{base}/tempe/pesanan" class="back">← Kembali</a>
 		<h1>Riwayat Pesanan</h1>
 	</header>
 
@@ -24,7 +24,7 @@
 		{#if dates.length === 0}
 			<div class="empty">
 				<p>Belum ada data pesanan.</p>
-				<a href="{base}/" class="cta">Mulai Input Pesanan</a>
+				<a href="{base}/tempe/pesanan" class="cta">Mulai Input Pesanan</a>
 			</div>
 		{:else}
 			<input
