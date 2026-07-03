@@ -116,17 +116,15 @@
 
 		// Commit to CSV store
 		const rows = getCSVData(selectedDate);
-		const total = s.oranye + s.hijau + s.merah;
 		const status = s.libur ? 'libur' : 'pesan';
 
 		const row: PesananRow = {
-			tanggal: selectedDate,
+			tanggal: `${selectedDate} ${time}`,
 			id_sales: sales.id,
 			nama_sales: sales.name,
 			tempe_oranye: s.libur ? 0 : s.oranye,
 			tempe_hijau: s.libur ? 0 : s.hijau,
 			tempe_merah: s.libur ? 0 : s.merah,
-			total: s.libur ? 0 : total,
 			status
 		};
 

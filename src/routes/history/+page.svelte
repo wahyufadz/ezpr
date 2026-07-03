@@ -37,7 +37,7 @@
 			<div class="list">
 				{#each filteredDates as date}
 					{@const rows = getCSVData(date)}
-					{@const totalQty = rows.reduce((sum, r) => sum + r.total, 0)}
+					{@const totalQty = rows.reduce((sum, r) => sum + r.tempe_oranye + r.tempe_hijau + r.tempe_merah, 0)}
 					{@const pesanCount = rows.filter(r => r.status === 'pesan').length}
 					{@const liburCount = rows.filter(r => r.status === 'libur').length}
 					<div
@@ -87,7 +87,7 @@
 												<td>{row.tempe_oranye}</td>
 												<td>{row.tempe_hijau}</td>
 												<td>{row.tempe_merah}</td>
-												<td class="total">{row.total}</td>
+												<td class="total">{row.tempe_oranye + row.tempe_hijau + row.tempe_merah}</td>
 												<td>
 													{#if row.status === 'libur'}
 														<span class="status-libur">Libur</span>

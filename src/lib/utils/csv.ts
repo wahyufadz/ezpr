@@ -1,23 +1,22 @@
 // CSV generation & parsing for pesanan tempe
 
 export interface PesananRow {
-	tanggal: string;
+	tanggal: string;   // YYYY-MM-DD HH:MM
 	id_sales: string;
 	nama_sales: string;
 	tempe_oranye: number;
 	tempe_hijau: number;
 	tempe_merah: number;
-	total: number;
 	status: 'pesan' | 'libur';
 }
 
-const CSV_HEADER = 'tanggal,id_sales,nama_sales,tempe_oranye,tempe_hijau,tempe_merah,total,status';
+const CSV_HEADER = 'tanggal,id_sales,nama_sales,tempe_oranye,tempe_hijau,tempe_merah,status';
 
 export function generateCSV(rows: PesananRow[]): string {
 	const lines = [CSV_HEADER];
 	for (const r of rows) {
 		lines.push(
-			[r.tanggal, r.id_sales, r.nama_sales, r.tempe_oranye, r.tempe_hijau, r.tempe_merah, r.total, r.status].join(',')
+			[r.tanggal, r.id_sales, r.nama_sales, r.tempe_oranye, r.tempe_hijau, r.tempe_merah, r.status].join(',')
 		);
 	}
 	return lines.join('\n');
@@ -29,7 +28,10 @@ export function parseCSV(text: string): PesananRow[] {
 	const rows: PesananRow[] = [];
 	for (const line of lines) {
 		const parts = line.split(',');
-		if (parts.length < 8) continue;
+		if (parts.length < 7) continue;
+		// Backward-compat: old format had 'total' column at idx 6
+		const hasTotal = parts.length >= 8;
+		const statusIdx = hasTotal ? 7 : 6;
 		rows.push({
 			tanggal: parts[0].trim(),
 			id_sales: parts[1].trim(),
@@ -37,8 +39,7 @@ export function parseCSV(text: string): PesananRow[] {
 			tempe_oranye: parseInt(parts[3], 10) || 0,
 			tempe_hijau: parseInt(parts[4], 10) || 0,
 			tempe_merah: parseInt(parts[5], 10) || 0,
-			total: parseInt(parts[6], 10) || 0,
-			status: parts[7].trim() === 'libur' ? 'libur' : 'pesan'
+			status: parts[statusIdx].trim() === 'libur' ? 'libur' : 'pesan'
 		});
 	}
 	return rows;
