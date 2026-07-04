@@ -1,17 +1,52 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { getAllCSVDates, getCSVData } from '$lib/utils/storage';
-	import { generateCSV, downloadCSV } from '$lib/utils/csv';
+	import { getOrderDates, loadOrders } from '$lib/utils/storage';
+	import { generateCSV, downloadCSV, type PesananRow } from '$lib/utils/csv';
 
-	const dates = $state(getAllCSVDates());
+	let dates = $state<string[]>([]);
+	let isLoading = $state(true);
 	let selectedDate = $state('');
 	let filterText = $state('');
+	// Cache rows per date to avoid re-fetching
+	let rowsCache = $state<Record<string, PesananRow[]>>({});
 
 	const filteredDates = $derived(
 		filterText
 			? dates.filter(d => d.includes(filterText))
 			: dates
 	);
+
+	// Load all dates on mount
+	async function init() {
+		try {
+			dates = await getOrderDates();
+		} catch (e) {
+			console.warn('Gagal memuat riwayat:', e);
+		}
+		isLoading = false;
+	}
+	init();
+
+	// Load rows for a date on demand
+	async function toggleDate(date: string) {
+		if (selectedDate === date) {
+			selectedDate = '';
+			return;
+		}
+		selectedDate = date;
+		if (!rowsCache[date]) {
+			try {
+				rowsCache[date] = await loadOrders(date);
+			} catch (e) {
+				console.warn('Gagal memuat detail:', e);
+				rowsCache[date] = [];
+			}
+		}
+	}
+
+	function getRows(date: string): PesananRow[] {
+		return rowsCache[date] || [];
+	}
 </script>
 
 <div class="app">
@@ -21,7 +56,9 @@
 	</header>
 
 	<main class="main">
-		{#if dates.length === 0}
+		{#if isLoading}
+			<div class="loading">⏳ Memuat riwayat...</div>
+		{:else if dates.length === 0}
 			<div class="empty">
 				<p>Belum ada data pesanan.</p>
 				<a href="{base}/tempe/pesanan" class="cta">Mulai Input Pesanan</a>
@@ -36,14 +73,17 @@
 
 			<div class="list">
 				{#each filteredDates as date}
-					{@const rows = getCSVData(date)}
+					{@const rows = getRows(date)}
 					{@const totalQty = rows.reduce((sum, r) => sum + r.tempe_oranye + r.tempe_hijau + r.tempe_merah, 0)}
 					{@const pesanCount = rows.filter(r => r.status === 'pesan').length}
 					{@const liburCount = rows.filter(r => r.status === 'libur').length}
 					<div
 						class="history-card"
 						class:expanded={selectedDate === date}
-						onclick={() => selectedDate = selectedDate === date ? '' : date}
+						onclick={() => toggleDate(date)}
+						onkeydown={(e) => { if (e.key === 'Enter') toggleDate(date); }}
+						role="button"
+						tabindex="0"
 					>
 						<div class="history-summary">
 							<div class="history-date">{date}</div>
@@ -134,6 +174,12 @@
 
 	.main {
 		padding: 1rem 0;
+	}
+
+	.loading {
+		text-align: center;
+		color: #888;
+		padding: 3rem 1rem;
 	}
 
 	.empty {

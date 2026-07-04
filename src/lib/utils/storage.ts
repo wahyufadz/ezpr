@@ -1,9 +1,8 @@
-// localStorage helpers — silent save & restore with corruption handling
-
+// Storage helpers: form draft in localStorage, saved orders via API
 import type { PesananRow } from './csv';
+import { saveOrderApi, loadOrdersApi, resetOrdersApi, getOrderDatesApi } from './api';
 
 const FORM_KEY_PREFIX = 'ezpr-form-';
-const CSV_KEY_PREFIX = 'ezpr-csv-';
 
 export interface FormState {
 	date: string; // YYYY-MM-DD
@@ -16,6 +15,8 @@ export interface FormState {
 		savedAt?: string; // HH:MM
 	}>;
 }
+
+// ─── Form draft (localStorage only — keystroke drafts) ───
 
 function safeGet(key: string): string | null {
 	try {
@@ -46,37 +47,37 @@ export function loadFormState(date: string): FormState | null {
 		if (parsed && typeof parsed === 'object' && parsed.sales) return parsed as FormState;
 		return null;
 	} catch {
-		return null; // corrupted — silently reset
+		return null;
 	}
 }
 
-export function saveCSVData(date: string, rows: PesananRow[]): void {
-	safeSet(CSV_KEY_PREFIX + date, JSON.stringify(rows));
+// ─── Saved orders (server API) ───
+
+/**
+ * Save a single order to the server.
+ * Upserts by tanggal+id_sales — safe for concurrent saves.
+ */
+export async function saveOrder(row: PesananRow): Promise<void> {
+	return saveOrderApi(row);
 }
 
-export function getCSVData(date: string): PesananRow[] {
-	const raw = safeGet(CSV_KEY_PREFIX + date);
-	if (!raw) return [];
-	try {
-		const parsed = JSON.parse(raw);
-		if (Array.isArray(parsed)) return parsed as PesananRow[];
-		return [];
-	} catch {
-		return [];
-	}
+/**
+ * Load all saved orders for a date from the server.
+ */
+export async function loadOrders(date: string): Promise<PesananRow[]> {
+	return loadOrdersApi(date);
 }
 
-export function getAllCSVDates(): string[] {
-	const dates: string[] = [];
-	try {
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key?.startsWith(CSV_KEY_PREFIX)) {
-				dates.push(key.replace(CSV_KEY_PREFIX, ''));
-			}
-		}
-	} catch {
-		// localStorage not available — return empty
-	}
-	return dates.sort().reverse();
+/**
+ * Clear all orders for a date.
+ */
+export async function resetOrders(date: string): Promise<void> {
+	return resetOrdersApi(date);
+}
+
+/**
+ * Get all dates that have orders.
+ */
+export async function getOrderDates(): Promise<string[]> {
+	return getOrderDatesApi();
 }

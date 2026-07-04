@@ -2,7 +2,7 @@
 	import SalesCard from '$lib/components/SalesCard.svelte';
 	import salesData from '$lib/data/sales.json';
 	import { generateCSV, downloadCSV, type PesananRow } from '$lib/utils/csv';
-	import { saveFormState, loadFormState, saveCSVData, getCSVData } from '$lib/utils/storage';
+	import { saveFormState, loadFormState, saveOrder, loadOrders, resetOrders } from '$lib/utils/storage';
 
 	const activeSales = salesData.sales.filter(s => s.active);
 
@@ -33,6 +33,8 @@
 	let resetInputText = $state('');
 	const RESET_CONFIRM_WORD = 'RESET';
 	let lastUpdated = $state('');
+	let isLoading = $state(true);
+	let isRestoring = $state(true);
 
 	// Per-sales state
 	interface SalesState {
@@ -45,9 +47,8 @@
 	}
 
 	let salesState = $state<Record<string, SalesState>>({});
-	let isRestoring = $state(true); // skip save during initial restore
 
-	function initState() {
+	function initState(): Record<string, SalesState> {
 		const fresh: Record<string, SalesState> = {};
 		for (const s of activeSales) {
 			fresh[s.id] = { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
@@ -55,20 +56,52 @@
 		return fresh;
 	}
 
-	// Try restore from localStorage
-	const restored = loadFormState(selectedDate);
-	if (restored && restored.date === selectedDate) {
-		// Merge restored state with current sales list
-		const merged: Record<string, SalesState> = {};
-		for (const s of activeSales) {
-			const r = restored.sales[s.id];
-			merged[s.id] = r ? { ...r } : { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
+	/**
+	 * Load data for a date: localStorage draft first, then overlay server data.
+	 */
+	async function loadDateData(date: string) {
+		isLoading = true;
+		isRestoring = true;
+
+		// 1. Start with localStorage draft or blank
+		const draft = loadFormState(date);
+		if (draft && draft.date === date) {
+			const merged: Record<string, SalesState> = {};
+			for (const s of activeSales) {
+				const r = draft.sales[s.id];
+				merged[s.id] = r
+					? { ...r, saved: false, savedAt: '' } // reset save status, server will override
+					: { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
+			}
+			salesState = merged;
+		} else {
+			salesState = initState();
 		}
-		salesState = merged;
-	} else {
-		salesState = initState();
+
+		// 2. Overlay saved orders from server (takes priority over draft)
+		try {
+			const orders = await loadOrders(date);
+			for (const order of orders) {
+				const s = salesState[order.id_sales];
+				if (s) {
+					s.oranye = order.tempe_oranye;
+					s.hijau = order.tempe_hijau;
+					s.merah = order.tempe_merah;
+					s.libur = order.status === 'libur';
+					s.saved = true;
+					s.savedAt = order.tanggal.slice(11, 16); // extract HH:MM from "YYYY-MM-DD HH:MM"
+				}
+			}
+		} catch (e) {
+			console.warn('Gagal memuat data dari server:', e);
+		}
+
+		isRestoring = false;
+		isLoading = false;
 	}
-	isRestoring = false;
+
+	// Initial load (use today's date explicitly to avoid closure capture)
+	loadDateData(getTodayStr());
 
 	function saveFormToStorage() {
 		if (isRestoring) return;
@@ -81,7 +114,7 @@
 		salesState[id] = {
 			...current,
 			...data,
-			saved: current.saved ? false : false,
+			saved: false,
 			savedAt: ''
 		};
 		const now = new Date();
@@ -98,25 +131,13 @@
 		saveFormToStorage();
 	}
 
-	function handleSave(id: string) {
+	async function handleSave(id: string) {
 		const s = salesState[id];
 		const sales = activeSales.find(x => x.id === id);
 		if (!sales || !s) return;
 
 		const now = new Date();
 		const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-		salesState[id] = {
-			...s,
-			saved: true,
-			savedAt: time
-		};
-
-		lastUpdated = time;
-
-		// Commit to CSV store
-		const rows = getCSVData(selectedDate);
-		const status = s.libur ? 'libur' : 'pesan';
 
 		const row: PesananRow = {
 			tanggal: `${selectedDate} ${time}`,
@@ -125,47 +146,43 @@
 			tempe_oranye: s.libur ? 0 : s.oranye,
 			tempe_hijau: s.libur ? 0 : s.hijau,
 			tempe_merah: s.libur ? 0 : s.merah,
-			status
+			status: s.libur ? 'libur' : 'pesan'
 		};
 
-		// Replace existing row for same sales+date
-		const idx = rows.findIndex(r => r.id_sales === id);
-		if (idx >= 0) rows[idx] = row;
-		else rows.push(row);
-
-		saveCSVData(selectedDate, rows);
-		saveFormToStorage();
-		showToast(`✅ ${sales.name} tersimpan`);
+		try {
+			await saveOrder(row);
+			salesState[id] = { ...s, saved: true, savedAt: time };
+			lastUpdated = time;
+			saveFormToStorage();
+			showToast(`✅ ${sales.name} tersimpan`);
+		} catch (e) {
+			console.error('Gagal menyimpan:', e);
+			showToast('❌ Gagal menyimpan, coba lagi');
+		}
 	}
 
-	function handleDownload() {
-		const rows = getCSVData(selectedDate);
-		const csv = generateCSV(rows);
-		downloadCSV(csv, `pesanan-tempe-${selectedDate}.csv`);
-		showToast('📥 CSV didownload');
+	async function handleDownload() {
+		try {
+			const rows = await loadOrders(selectedDate);
+			if (rows.length === 0) {
+				showToast('⚠️ Belum ada data tersimpan');
+				return;
+			}
+			const csv = generateCSV(rows);
+			downloadCSV(csv, `pesanan-tempe-${selectedDate}.csv`);
+			showToast('📥 CSV didownload');
+		} catch (e) {
+			console.error('Gagal download:', e);
+			showToast('❌ Gagal download');
+		}
 	}
 
 	function handleDateChange(e: Event) {
 		const target = e.target as HTMLInputElement;
 		const newDate = target.value;
-		// Save current date state first
 		saveFormState(selectedDate, { date: selectedDate, sales: { ...salesState } });
-
 		selectedDate = newDate;
-		isRestoring = true;
-
-		const restoredDate = loadFormState(newDate);
-		if (restoredDate && restoredDate.date === newDate) {
-			const merged: Record<string, SalesState> = {};
-			for (const s of activeSales) {
-				const r = restoredDate.sales[s.id];
-				merged[s.id] = r ? { ...r } : { oranye: 0, hijau: 0, merah: 0, libur: false, saved: false, savedAt: '' };
-			}
-			salesState = merged;
-		} else {
-			salesState = initState();
-		}
-		isRestoring = false;
+		loadDateData(newDate);
 	}
 
 	function handleReset() {
@@ -173,12 +190,16 @@
 		showResetConfirm = true;
 	}
 
-	function confirmReset() {
+	async function confirmReset() {
 		if (resetInputText !== RESET_CONFIRM_WORD) return;
 		showResetConfirm = false;
 		resetInputText = '';
+		try {
+			await resetOrders(selectedDate);
+		} catch (e) {
+			console.warn('Gagal reset di server:', e);
+		}
 		salesState = initState();
-		saveCSVData(selectedDate, []);
 		saveFormToStorage();
 		showToast('🔄 Semua direset');
 	}
@@ -242,14 +263,12 @@
 	let activeTab: 'belum' | 'tersimpan' | 'libur' | null = $state('belum');
 	let autoSwitched = $state(false);
 
-	// Toggle tab: click same tab → close
 	function switchTab(tab: 'belum' | 'tersimpan' | 'libur') {
 		activeTab = activeTab === tab ? null : tab;
-		// If user manually goes to 'belum' after auto-switch, allow it
 		if (tab === 'belum') autoSwitched = true;
 	}
 
-	// Auto-switch to Tersimpan when all done (one-shot per session)
+	// Auto-switch to Tersimpan when all done
 	$effect(() => {
 		if (allSaved && activeTab === 'belum' && !autoSwitched) {
 			activeTab = 'tersimpan';
@@ -280,184 +299,188 @@
 </script>
 
 <div class="app">
-	<header class="header">
-		<h1>Pesanan Tempe Harian</h1>
-		<div class="date-display">{formatDisplayDate(selectedDate)}</div>
-		{#if lastUpdated}
-			<div class="updated-info">Terakhir update data {lastUpdated}</div>
-		{/if}
-	</header>
+	{#if isLoading}
+		<div class="loading">⏳ Memuat data...</div>
+	{:else}
+		<header class="header">
+			<h1>Pesanan Tempe Harian</h1>
+			<div class="date-display">{formatDisplayDate(selectedDate)}</div>
+			{#if lastUpdated}
+				<div class="updated-info">Terakhir update data {lastUpdated}</div>
+			{/if}
+		</header>
 
-	<!-- Summary -->
-	<div class="summary-bar">
-		<div class="summary-item-bar" style="--clr: #FF9800">
-			<span class="summary-label">🟠 Oranye</span>
-			<span class="summary-value">{totalOranye}</span>
+		<!-- Summary -->
+		<div class="summary-bar">
+			<div class="summary-item-bar" style="--clr: #FF9800">
+				<span class="summary-label">🟠 Oranye</span>
+				<span class="summary-value">{totalOranye}</span>
+			</div>
+			<div class="summary-item-bar" style="--clr: #4CAF50">
+				<span class="summary-label">🟢 Hijau</span>
+				<span class="summary-value">{totalHijau}</span>
+			</div>
+			<div class="summary-item-bar" style="--clr: #F44336">
+				<span class="summary-label">🔴 Merah</span>
+				<span class="summary-value">{totalMerah}</span>
+			</div>
 		</div>
-		<div class="summary-item-bar" style="--clr: #4CAF50">
-			<span class="summary-label">🟢 Hijau</span>
-			<span class="summary-value">{totalHijau}</span>
+
+		<div class="toolbar">
+			<span class="counter-inline">{savedCount}/{totalCount} tersimpan</span>
+			<button class="reset-btn" onclick={handleReset}>Reset</button>
 		</div>
-		<div class="summary-item-bar" style="--clr: #F44336">
-			<span class="summary-label">🔴 Merah</span>
-			<span class="summary-value">{totalMerah}</span>
+
+		<!-- Searchbar -->
+		<div class="searchbar">
+			<input
+				type="text"
+				class="search-input"
+				placeholder="🔍 Cari nama sales..."
+				bind:value={searchText}
+			/>
+			{#if searchText}
+				<button class="search-clear" onclick={() => searchText = ''}>✕</button>
+			{/if}
 		</div>
-	</div>
 
-	<div class="toolbar">
-		<span class="counter-inline">{savedCount}/{totalCount} tersimpan</span>
-		<button class="reset-btn" onclick={handleReset}>Reset</button>
-	</div>
+		<!-- Floating tab bar -->
+		<div class="tab-bar">
+			<button
+				class="tab"
+				class:active={activeTab === 'belum'}
+				onclick={() => switchTab('belum')}
+			>
+				📝 Belum <span class="tab-count">{sectionBelum.length}</span>
+			</button>
+			<button
+				class="tab"
+				class:active={activeTab === 'tersimpan'}
+				onclick={() => switchTab('tersimpan')}
+			>
+				✅ Tersimpan <span class="tab-count">{sectionTersimpan.length}</span>
+			</button>
+			<button
+				class="tab"
+				class:active={activeTab === 'libur'}
+				onclick={() => switchTab('libur')}
+			>
+				🚫 Libur <span class="tab-count">{sectionLibur.length}</span>
+			</button>
+		</div>
 
-	<!-- Searchbar -->
-	<div class="searchbar">
-		<input
-			type="text"
-			class="search-input"
-			placeholder="🔍 Cari nama sales..."
-			bind:value={searchText}
-		/>
-		{#if searchText}
-			<button class="search-clear" onclick={() => searchText = ''}>✕</button>
-		{/if}
-	</div>
-
-	<!-- Floating tab bar -->
-	<div class="tab-bar">
-		<button
-			class="tab"
-			class:active={activeTab === 'belum'}
-			onclick={() => switchTab('belum')}
-		>
-			📝 Belum <span class="tab-count">{sectionBelum.length}</span>
-		</button>
-		<button
-			class="tab"
-			class:active={activeTab === 'tersimpan'}
-			onclick={() => switchTab('tersimpan')}
-		>
-			✅ Tersimpan <span class="tab-count">{sectionTersimpan.length}</span>
-		</button>
-		<button
-			class="tab"
-			class:active={activeTab === 'libur'}
-			onclick={() => switchTab('libur')}
-		>
-			🚫 Libur <span class="tab-count">{sectionLibur.length}</span>
-		</button>
-	</div>
-
-	<main class="main">
-		{#if activeSales.length === 0}
-			<div class="empty">Tidak ada sales aktif</div>
-		{:else if activeTab === 'belum'}
-			<div class="section-body">
-				{#if sectionBelum.length === 0}
-					<div class="empty-section done">
-					<p>Semua sudah terkonfirmasi ✅</p>
-					<button class="save-data-inline" onclick={handleDownload}>
-						💾 Simpan Data
-					</button>
+		<main class="main">
+			{#if activeSales.length === 0}
+				<div class="empty">Tidak ada sales aktif</div>
+			{:else if activeTab === 'belum'}
+				<div class="section-body">
+					{#if sectionBelum.length === 0}
+						<div class="empty-section done">
+						<p>Semua sudah terkonfirmasi ✅</p>
+						<button class="save-data-inline" onclick={handleDownload}>
+							💾 Simpan Data
+						</button>
+					</div>
+					{:else}
+						{#each filteredBelum as sales (sales.id)}
+							{@const s = salesState[sales.id]}
+							{#if s}
+								<SalesCard
+									name={sales.name}
+									oranye={s.oranye}
+									hijau={s.hijau}
+									merah={s.merah}
+									libur={s.libur}
+									saved={s.saved}
+									savedAt={s.savedAt}
+									onSave={() => handleSave(sales.id)}
+									onUpdate={(data) => updateSales(sales.id, data)}
+									onEdit={() => handleEdit(sales.id)}
+								/>
+							{/if}
+						{/each}
+					{/if}
 				</div>
-				{:else}
-					{#each filteredBelum as sales (sales.id)}
-						{@const s = salesState[sales.id]}
-						{#if s}
-							<SalesCard
-								name={sales.name}
-								oranye={s.oranye}
-								hijau={s.hijau}
-								merah={s.merah}
-								libur={s.libur}
-								saved={s.saved}
-								savedAt={s.savedAt}
-								onSave={() => handleSave(sales.id)}
-								onUpdate={(data) => updateSales(sales.id, data)}
-								onEdit={() => handleEdit(sales.id)}
-							/>
-						{/if}
-					{/each}
-				{/if}
-			</div>
-		{:else if activeTab === 'tersimpan'}
-			<div class="section-body">
-				{#if sectionTersimpan.length === 0}
-					<div class="empty-section">Belum ada</div>
-				{:else}
-					{#each filteredTersimpan as sales (sales.id)}
-						{@const s = salesState[sales.id]}
-						{#if s}
-							<SalesCard
-								name={sales.name}
-								oranye={s.oranye}
-								hijau={s.hijau}
-								merah={s.merah}
-								libur={s.libur}
-								saved={s.saved}
-								savedAt={s.savedAt}
-								onSave={() => handleSave(sales.id)}
-								onUpdate={(data) => updateSales(sales.id, data)}
-								onEdit={() => handleEdit(sales.id)}
-							/>
-						{/if}
-					{/each}
-				{/if}
-			</div>
-		{:else if activeTab === 'libur'}
-			<div class="section-body">
-				{#if sectionLibur.length === 0}
-					<div class="empty-section">Semua masuk</div>
-				{:else}
-					{#each filteredLibur as sales (sales.id)}
-						{@const s = salesState[sales.id]}
-						{#if s}
-							<SalesCard
-								name={sales.name}
-								oranye={s.oranye}
-								hijau={s.hijau}
-								merah={s.merah}
-								libur={s.libur}
-								saved={s.saved}
-								savedAt={s.savedAt}
-								onSave={() => handleSave(sales.id)}
-								onUpdate={(data) => updateSales(sales.id, data)}
-								onEdit={() => handleEdit(sales.id)}
-							/>
-						{/if}
-					{/each}
-				{/if}
-			</div>
-		{/if}
-	</main>
+			{:else if activeTab === 'tersimpan'}
+				<div class="section-body">
+					{#if sectionTersimpan.length === 0}
+						<div class="empty-section">Belum ada</div>
+					{:else}
+						{#each filteredTersimpan as sales (sales.id)}
+							{@const s = salesState[sales.id]}
+							{#if s}
+								<SalesCard
+									name={sales.name}
+									oranye={s.oranye}
+									hijau={s.hijau}
+									merah={s.merah}
+									libur={s.libur}
+									saved={s.saved}
+									savedAt={s.savedAt}
+									onSave={() => handleSave(sales.id)}
+									onUpdate={(data) => updateSales(sales.id, data)}
+									onEdit={() => handleEdit(sales.id)}
+								/>
+							{/if}
+						{/each}
+					{/if}
+				</div>
+			{:else if activeTab === 'libur'}
+				<div class="section-body">
+					{#if sectionLibur.length === 0}
+						<div class="empty-section">Semua masuk</div>
+					{:else}
+						{#each filteredLibur as sales (sales.id)}
+							{@const s = salesState[sales.id]}
+							{#if s}
+								<SalesCard
+									name={sales.name}
+									oranye={s.oranye}
+									hijau={s.hijau}
+									merah={s.merah}
+									libur={s.libur}
+									saved={s.saved}
+									savedAt={s.savedAt}
+									onSave={() => handleSave(sales.id)}
+									onUpdate={(data) => updateSales(sales.id, data)}
+									onEdit={() => handleEdit(sales.id)}
+								/>
+							{/if}
+						{/each}
+					{/if}
+				</div>
+			{/if}
+		</main>
 
-	{#if showResetConfirm}
-		<div class="overlay" onclick={() => showResetConfirm = false} role="dialog">
-			<div class="dialog" onclick={(e: MouseEvent) => e.stopPropagation()}>
-				<p>⚠️ <strong>Reset semua data?</strong></p>
-				<p class="dialog-hint">Ketik <code>RESET</code> untuk konfirmasi</p>
-				<input
-					type="text"
-					class="reset-input"
-					placeholder="Ketik RESET..."
-					bind:value={resetInputText}
-					onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') confirmReset(); }}
-				/>
-				<div class="dialog-actions">
-					<button class="dialog-btn cancel" onclick={() => showResetConfirm = false}>Batal</button>
-					<button
-						class="dialog-btn danger"
-						disabled={resetInputText !== RESET_CONFIRM_WORD}
-						onclick={confirmReset}
-					>
-						Hapus Semua
-					</button>
+		{#if showResetConfirm}
+			<div class="overlay" onclick={() => showResetConfirm = false} role="dialog">
+				<div class="dialog" onclick={(e: MouseEvent) => e.stopPropagation()}>
+					<p>⚠️ <strong>Reset semua data?</strong></p>
+					<p class="dialog-hint">Ketik <code>RESET</code> untuk konfirmasi</p>
+					<input
+						type="text"
+						class="reset-input"
+						placeholder="Ketik RESET..."
+						bind:value={resetInputText}
+						onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') confirmReset(); }}
+					/>
+					<div class="dialog-actions">
+						<button class="dialog-btn cancel" onclick={() => showResetConfirm = false}>Batal</button>
+						<button
+							class="dialog-btn danger"
+							disabled={resetInputText !== RESET_CONFIRM_WORD}
+							onclick={confirmReset}
+						>
+							Hapus Semua
+						</button>
+					</div>
 				</div>
 			</div>
-		</div>
-	{/if}
+		{/if}
 
-	{#if toast}
-		<div class="toast">{toast}</div>
+		{#if toast}
+			<div class="toast">{toast}</div>
+		{/if}
 	{/if}
 </div>
 
@@ -467,6 +490,13 @@
 		margin: 0 auto;
 		padding: 1rem;
 		min-height: 100vh;
+	}
+
+	.loading {
+		text-align: center;
+		color: #888;
+		padding: 3rem 1rem;
+		font-size: 1rem;
 	}
 
 	.header {
