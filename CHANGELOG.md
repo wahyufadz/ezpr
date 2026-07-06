@@ -5,6 +5,22 @@ Semua perubahan penting pada ezpr dicatat di sini.
 Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id/1.0.0/),
 versi mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
+## [0.3.0] - 6 Juli 2026
+
+### Added
+- Backend API terintegrasi langsung ke dalam SvelteKit via route handler (`+server.ts`) — tidak perlu server terpisah.
+- Tipe TypeScript untuk seluruh endpoint API dan modul database.
+- Database SQLite diinisialisasi otomatis saat server pertama kali dijalankan.
+
+### Changed
+- Adapter diubah dari `@sveltejs/adapter-static` ke `@sveltejs/adapter-node` — aplikasi berjalan sebagai Node.js server utuh.
+- Base path API berubah dari `/api` menjadi `/ezpr/api` mengikuti konfigurasi base aplikasi.
+- Script build dirapikan, hapus dependensi ke LiteSpeed.
+- Seluruh kode backend dikonversi dari JavaScript ke TypeScript.
+
+### Removed
+- Server HTTP terpisah (`server/index.cjs` dan `server/db.cjs`) — fungsionalitas dipindahkan ke `src/routes/api/` dan `src/lib/server/db.ts`.
+
 ## [0.2.0] - 3 Juli 2026
 
 ### Added
