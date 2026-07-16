@@ -243,21 +243,21 @@
 			.reduce((sum, s) => sum + s.merah, 0)
 	);
 
-	// Section groups (sorted by name)
+	// Section groups (sorted by active sort field & direction)
 	const sectionTersimpan = $derived(
-		sortedSales
-			.filter(s => salesState[s.id]?.saved && !salesState[s.id]?.libur)
-			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+		sortSalesList(
+			sortedSales.filter(s => salesState[s.id]?.saved && !salesState[s.id]?.libur)
+		)
 	);
 	const sectionLibur = $derived(
-		sortedSales
-			.filter(s => salesState[s.id]?.libur)
-			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+		sortSalesList(
+			sortedSales.filter(s => salesState[s.id]?.libur)
+		)
 	);
 	const sectionBelum = $derived(
-		sortedSales
-			.filter(s => !salesState[s.id]?.saved && !salesState[s.id]?.libur)
-			.sort((a, b) => a.name.localeCompare(b.name, 'id'))
+		sortSalesList(
+			sortedSales.filter(s => !salesState[s.id]?.saved && !salesState[s.id]?.libur)
+		)
 	);
 
 	let activeTab: 'belum' | 'tersimpan' | 'libur' | null = $state('belum');
@@ -277,6 +277,40 @@
 	});
 
 	const allSaved = $derived(sectionBelum.length === 0);
+
+	// Sort state
+	type SortField = 'nama' | 'waktu';
+	type SortDir = 'asc' | 'desc';
+
+	let sortField = $state<SortField>('nama');
+	let sortDir = $state<SortDir>('asc');
+
+	function toggleSort(field: SortField) {
+		if (sortField === field) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDir = 'asc';
+		}
+	}
+
+	function sortSalesList(list: typeof activeSales): typeof activeSales {
+		return [...list].sort((a, b) => {
+			const sa = salesState[a.id];
+			const sb = salesState[b.id];
+			if (!sa || !sb) return 0;
+
+			if (sortField === 'nama') {
+				return sortDir === 'asc'
+					? a.name.localeCompare(b.name, 'id')
+					: b.name.localeCompare(a.name, 'id');
+			}
+
+			// Sort by savedAt, fallback to name
+			const cmp = sa.savedAt.localeCompare(sb.savedAt) || a.name.localeCompare(b.name, 'id');
+			return sortDir === 'asc' ? cmp : -cmp;
+		});
+	}
 
 	// Search
 	let searchText = $state('');
@@ -344,29 +378,51 @@
 			{/if}
 		</div>
 
-		<!-- Floating tab bar -->
-		<div class="tab-bar">
-			<button
-				class="tab"
-				class:active={activeTab === 'belum'}
-				onclick={() => switchTab('belum')}
-			>
-				📝 Belum <span class="tab-count">{sectionBelum.length}</span>
-			</button>
-			<button
-				class="tab"
-				class:active={activeTab === 'tersimpan'}
-				onclick={() => switchTab('tersimpan')}
-			>
-				✅ Tersimpan <span class="tab-count">{sectionTersimpan.length}</span>
-			</button>
-			<button
-				class="tab"
-				class:active={activeTab === 'libur'}
-				onclick={() => switchTab('libur')}
-			>
-				🚫 Libur <span class="tab-count">{sectionLibur.length}</span>
-			</button>
+		<!-- Sticky bar: sort + tabs -->
+		<div class="sticky-bar">
+			<div class="sort-bar">
+				<button
+					class="sort-btn"
+					class:active={sortField === 'nama'}
+					onclick={() => toggleSort('nama')}
+				>
+					Nama {sortField === 'nama' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+				</button>
+				<button
+					class="sort-btn"
+					class:active={sortField === 'waktu'}
+					class:disabled={activeTab === 'belum'}
+					disabled={activeTab === 'belum'}
+					onclick={() => toggleSort('waktu')}
+					title={activeTab === 'belum' ? 'Hanya untuk tab Tersimpan & Libur' : ''}
+				>
+					Waktu {sortField === 'waktu' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+				</button>
+			</div>
+
+			<div class="tab-bar">
+				<button
+					class="tab"
+					class:active={activeTab === 'belum'}
+					onclick={() => switchTab('belum')}
+				>
+					📝 Belum <span class="tab-count">{sectionBelum.length}</span>
+				</button>
+				<button
+					class="tab"
+					class:active={activeTab === 'tersimpan'}
+					onclick={() => switchTab('tersimpan')}
+				>
+					✅ Tersimpan <span class="tab-count">{sectionTersimpan.length}</span>
+				</button>
+				<button
+					class="tab"
+					class:active={activeTab === 'libur'}
+					onclick={() => switchTab('libur')}
+				>
+					🚫 Libur <span class="tab-count">{sectionLibur.length}</span>
+				</button>
+			</div>
 		</div>
 
 		<main class="main">
@@ -621,14 +677,52 @@
 	}
 
 	/* Sticky tab bar */
-	.tab-bar {
+	.sort-bar {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0.5rem 0 0.25rem;
+	}
+
+	.sort-btn {
+		flex: 1;
+		padding: 0.45rem 0.4rem;
+		background: #1a1a1a;
+		color: #888;
+		border: 1px solid #333;
+		border-radius: 8px;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.sort-btn:active {
+		background: #2a2a2a;
+	}
+
+	.sort-btn.active {
+		background: #2a2a2a;
+		color: #fff;
+		border-color: #FF9800;
+	}
+
+	.sort-btn.disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.sticky-bar {
 		position: sticky;
 		top: 0;
 		z-index: 40;
+		background: #121212;
+		padding-bottom: 0.25rem;
+	}
+
+	.tab-bar {
 		display: flex;
 		gap: 0.4rem;
-		padding: 0.5rem 0 0.75rem;
-		background: #121212;
+		padding: 0.25rem 0 0.5rem;
 	}
 
 	.tab {

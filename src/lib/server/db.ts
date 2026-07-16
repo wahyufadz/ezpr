@@ -1,12 +1,10 @@
 // SQLite database for tempe orders
 import Database from 'better-sqlite3';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import type { PesananRow } from '$lib/utils/csv';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', '..', '..', 'data', 'orders.db');
+const DB_PATH = path.join(process.cwd(), 'data', 'orders.db');
 
 // Ensure data directory exists
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });

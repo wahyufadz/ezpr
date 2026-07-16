@@ -65,9 +65,11 @@
 		onEdit();
 	}
 
+	const allZero = $derived(oranye === 0 && hijau === 0 && merah === 0 && !libur);
+
 	function handleSave() {
-		const allZero = oranye === 0 && hijau === 0 && merah === 0;
-		if (allZero && !libur) {
+		const allZeroNoLibur = oranye === 0 && hijau === 0 && merah === 0 && !libur;
+		if (allZeroNoLibur) {
 			showConfirm = true;
 			return;
 		}
@@ -156,7 +158,7 @@
 		</div>
 
 		<div class="card-footer">
-			<button class="save-btn" onclick={handleSave}>
+			<button class="save-btn" disabled={allZero} onclick={handleSave}>
 				Simpan
 			</button>
 		</div>
@@ -336,6 +338,13 @@
 
 	.save-btn:active {
 		opacity: 0.8;
+	}
+
+	.save-btn:disabled {
+		background: #444;
+		color: #888;
+		cursor: not-allowed;
+		opacity: 0.6;
 	}
 
 	.edit-btn {

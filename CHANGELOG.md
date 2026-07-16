@@ -5,6 +5,20 @@ Semua perubahan penting pada ezpr dicatat di sini.
 Format berdasarkan [Keep a Changelog](https://keepachangelog.com/id/1.0.0/),
 versi mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
+## [0.4.0] - 16 Juli 2026
+
+### Added
+- Sort controls di tab pesanan — urut berdasarkan nama atau waktu input, ascending/descending.
+- Tombol Simpan otomatis disabled jika semua varian tempe masih kosong (tidak perlu konfirmasi dialog).
+
+### Changed
+- Sort bar dan tab bar digabung dalam satu container sticky — tetap terlihat saat scroll.
+- Path database SQLite menggunakan `process.cwd()` agar konsisten antara development dan production build.
+
+### Fixed
+- Data tersimpan di `build/` setelah rebuild, sekarang kembali ke direktori proyek.
+- Klasifikasi database tidak hilang saat rebuild project.
+
 ## [0.3.0] - 6 Juli 2026
 
 ### Added
